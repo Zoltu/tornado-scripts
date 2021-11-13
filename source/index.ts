@@ -154,8 +154,7 @@ export async function withdraw(testOnly: boolean) {
 			const receipt = await waitForReceipt(client, transactionHash)
 			if (receipt.status !== 'success') throw new Error(`Receipt status indicates failure.`)
 		}
-	}
-	else {
+	} else {
 		function parseStatusBody(body: unknown) {
 			if (typeof body !== 'object' || body === null) throw new Error(`Expected an object but got a ${typeof body}\n${body}`)
 			assertPropertyWithType(body, 'rewardAccount', assertIsHexString)
