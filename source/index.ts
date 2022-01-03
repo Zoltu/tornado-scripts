@@ -1,7 +1,7 @@
 import fetch from 'node-fetch'
 import { secp256k1, ethereum, keccak256 } from '@zoltu/ethereum-crypto'
 import { encodeMethod } from '@zoltu/ethereum-abi-encoder'
-import { main, promptForAddress, promptForEnterKey, promptForPrivateKey, promptForStringUnion } from './utils/script-helpers'
+import { main, promptForAddress, promptForEnterKey, promptForGasFees, promptForPrivateKey, promptForStringUnion } from './utils/script-helpers'
 import { createDeposit, generateProof, rbigint, toHex } from './tornado'
 import { addressString, attoString, bytes32String, bytesToUnsigned, nanoString } from './utils/bigint'
 import { EthereumClient, waitForReceipt } from './utils/ethereum-client'
@@ -16,9 +16,6 @@ import { agent } from './utils/agent'
 
 const ETHEREUM_JSON_RPC_ENDPOINT = 'http://host.docker.internal:8545'
 // const ETHEREUM_JSON_RPC_ENDPOINT = 'http://localhost:8545'
-
-const MAX_FEE_PER_GAS = 100n * 10n**9n
-const MAX_PRIORITY_FEE_PER_GAS = 1n * 10n**9n
 
 const GET_LOGS_BATCH_SIZE = 10_000n
 
@@ -41,6 +38,7 @@ export async function deposit() {
 	const deposit = createDeposit({ nullifier: rbigint(31), secret: rbigint(31) })
 	const note = toHex(deposit.preimage, 62)
 	const noteString = `tornado-eth-${sizeToLabel(size)}-1-${note}`
+	const { maxFeePerGas, maxPriorityFeePerGas } = await promptForGasFees()
 
 	console.log(`Your note: ${noteString}`)
 	await printBalance(client, 'Tornado', tornadoInstance)
@@ -53,9 +51,9 @@ export async function deposit() {
 		accessList: [],
 		data,
 		from: me.address,
-		gasLimit: 2_000_000n,
-		maxFeePerGas: MAX_FEE_PER_GAS,
-		maxPriorityFeePerGas: MAX_PRIORITY_FEE_PER_GAS,
+		gasLimit: 1_000_000n,
+		maxFeePerGas,
+		maxPriorityFeePerGas,
 		nonce,
 		to: TORNADO_PROXY_ADDRESS,
 		type: '1559',
@@ -63,6 +61,7 @@ export async function deposit() {
 		value: size,
 	})
 
+	console.log(`Depositing ${attoString(size)} ETH with ${nanoString(maxFeePerGas)} max fee and ${nanoString(maxPriorityFeePerGas)} priority fee.`)
 	await promptForEnterKey()
 	
 	console.log('Submitting deposit transaction')
@@ -125,6 +124,7 @@ export async function withdraw(testOnly: boolean) {
 
 	if (relayer === undefined) {
 		const me = testOnly ? { address: 0n, privateKey: 1n, } : await getMe()
+		const { maxFeePerGas, maxPriorityFeePerGas } = await promptForGasFees()
 		const { proof, root } = await getProof(me.address, 0n, 0n)
 		// withdraw(address _tornado, bytes _proof, bytes32 _root, bytes32 _nullifierHash, address _recipient, address _relayer, uint256 _fee, uint256 _refund)
 		const data = encodeMethod(0xb438689f, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS, [ tornadoInstance, proof, root, nullifierHash, me.address, 0n, 0n, 0n ])
@@ -136,8 +136,8 @@ export async function withdraw(testOnly: boolean) {
 			data,
 			from: me.address,
 			gasLimit: 1_000_000n,
-			maxFeePerGas: MAX_FEE_PER_GAS,
-			maxPriorityFeePerGas: MAX_PRIORITY_FEE_PER_GAS,
+			maxFeePerGas,
+			maxPriorityFeePerGas,
 			nonce,
 			to: TORNADO_PROXY_ADDRESS,
 			value: 0n,
@@ -147,7 +147,7 @@ export async function withdraw(testOnly: boolean) {
 			const result = await client.call(signedTransaction)
 			console.log(`Call Result (0x usually means success): ${toHexString(result)}`)
 		} else {
-			console.log(`Withdrawing ${attoString(size)} ETH without a relayer to ${addressString(me.address)} with priority fee of ${nanoString(MAX_PRIORITY_FEE_PER_GAS)} and a max fee of ${nanoString(MAX_FEE_PER_GAS)}`)
+			console.log(`Withdrawing ${attoString(size)} ETH without a relayer to ${addressString(me.address)} with priority fee of ${nanoString(maxFeePerGas)} and a max fee of ${nanoString(maxPriorityFeePerGas)}`)
 			await promptForEnterKey()
 			const transactionHash = await client.sendSignedTransaction(signedTransaction)
 			console.log(`Transaction Hash: 0x${bytes32String(transactionHash)}`)

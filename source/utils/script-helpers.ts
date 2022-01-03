@@ -1,6 +1,6 @@
 import * as readline from 'readline'
 import { ethereum, hdWallet, mnemonic } from '@zoltu/ethereum-crypto'
-import { stringToAtto } from './bigint'
+import { stringToAtto, stringToNano } from './bigint'
 import { parseAddress } from './wire'
 
 export function main(func: () => Promise<void>) {
@@ -71,6 +71,16 @@ export async function promptForEth(message: string = `Amount (in ETH): `) {
 		const amountString = await prompt(message)
 		const amount = stringToAtto(amountString)
 		return amount
+	})
+}
+
+export async function promptForGasFees() {
+	return withPrompt(async prompt => {
+		const maxFeeString = await prompt('💳 Maximum nanoeth per gas: ')
+		const maxFeePerGas = stringToNano(maxFeeString)
+		const priorityFeeString = await prompt('💳 Priority nanoeth per gas: ')
+		const maxPriorityFeePerGas = stringToNano(priorityFeeString)
+		return { maxFeePerGas, maxPriorityFeePerGas }
 	})
 }
 
