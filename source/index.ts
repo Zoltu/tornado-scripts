@@ -124,7 +124,7 @@ export async function withdraw(testOnly: boolean) {
 
 	if (relayer === undefined) {
 		const me = testOnly ? { address: 0n, privateKey: 1n, } : await getMe()
-		const { maxFeePerGas, maxPriorityFeePerGas } = await promptForGasFees()
+		const { maxFeePerGas, maxPriorityFeePerGas } = testOnly ? { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n } : await promptForGasFees()
 		const { proof, root } = await getProof(me.address, 0n, 0n)
 		// withdraw(address _tornado, bytes _proof, bytes32 _root, bytes32 _nullifierHash, address _recipient, address _relayer, uint256 _fee, uint256 _refund)
 		const data = encodeMethod(0xb438689f, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS, [ tornadoInstance, proof, root, nullifierHash, me.address, 0n, 0n, 0n ])
