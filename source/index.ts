@@ -1,7 +1,7 @@
 import fetch from 'node-fetch'
 import { secp256k1, ethereum, keccak256 } from '@zoltu/ethereum-crypto'
 import { encodeMethod } from '@zoltu/ethereum-abi-encoder'
-import { main, promptForAddress, promptForEnterKey, promptForGasFees, promptForPrivateKey, promptForStringUnion } from './utils/script-helpers'
+import { main, promptForAddress, promptForEnterKey, promptForGasFees, promptForInteger, promptForPrivateKey, promptForStringUnion } from './utils/script-helpers'
 import { createDeposit, generateProof, rbigint, toHex } from './tornado'
 import { addressString, attoString, bytes32String, bytesToUnsigned, nanoString } from './utils/bigint'
 import { EthereumClient, waitForReceipt } from './utils/ethereum-client'
@@ -16,6 +16,7 @@ import { agent } from './utils/agent'
 
 const ETHEREUM_JSON_RPC_ENDPOINT = 'http://host.docker.internal:8545'
 // const ETHEREUM_JSON_RPC_ENDPOINT = 'http://localhost:8545'
+const EXTRA_HEADERS = {}
 
 const GET_LOGS_BATCH_SIZE = 10_000n
 
@@ -32,50 +33,54 @@ async function printBalance(client: EthereumClient, name: string, address: bigin
 }
 
 export async function deposit() {
-	const client = new EthereumClient(ETHEREUM_JSON_RPC_ENDPOINT)
+	const client = new EthereumClient(ETHEREUM_JSON_RPC_ENDPOINT, EXTRA_HEADERS)
 	const { size, tornadoInstance } = await promptForNoteSize()
 	const me = await getMe()
-	const deposit = createDeposit({ nullifier: rbigint(31), secret: rbigint(31) })
-	const note = toHex(deposit.preimage, 62)
-	const noteString = `tornado-eth-${sizeToLabel(size)}-1-${note}`
 	const { maxFeePerGas, maxPriorityFeePerGas } = await promptForGasFees()
+	const count = await promptForInteger(`Number of Notes: `)
 
-	console.log(`Your note: ${noteString}`)
-	await printBalance(client, 'Tornado', tornadoInstance)
-	await printBalance(client, 'Sender', me.address)
+	for (let i = 0; i < count; ++i) {
+		const deposit = createDeposit({ nullifier: rbigint(31), secret: rbigint(31) })
+		const note = toHex(deposit.preimage, 62)
+		const noteString = `tornado-eth-${sizeToLabel(size)}-1-${note}`
 	
-	// deposit(address _tornado, bytes32 _commitment, bytes _encryptedNote)
-	const data = encodeMethod(0x13d98d13, TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, [tornadoInstance, deposit.commitment, new Uint8Array(0)])
-	const nonce = await client.getTransactionCount(me.address)
-	const signedTransaction = await signTransaction(me.privateKey, {
-		accessList: [],
-		data,
-		from: me.address,
-		gasLimit: 1_000_000n,
-		maxFeePerGas,
-		maxPriorityFeePerGas,
-		nonce,
-		to: TORNADO_PROXY_ADDRESS,
-		type: '1559',
-		chainId: 1n,
-		value: size,
-	})
-
-	console.log(`Depositing ${attoString(size)} ETH with ${nanoString(maxFeePerGas)} max fee and ${nanoString(maxPriorityFeePerGas)} priority fee.`)
-	await promptForEnterKey()
+		console.log(`Your note: ${noteString}`)
+		await printBalance(client, 'Tornado', tornadoInstance)
+		await printBalance(client, 'Sender', me.address)
+		
+		// deposit(address _tornado, bytes32 _commitment, bytes _encryptedNote)
+		const data = encodeMethod(0x13d98d13, TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, [tornadoInstance, deposit.commitment, new Uint8Array(0)])
+		const nonce = await client.getTransactionCount(me.address)
+		const signedTransaction = await signTransaction(me.privateKey, {
+			accessList: [],
+			data,
+			from: me.address,
+			gasLimit: 1_000_000n,
+			maxFeePerGas,
+			maxPriorityFeePerGas,
+			nonce,
+			to: TORNADO_PROXY_ADDRESS,
+			type: '1559',
+			chainId: 1n,
+			value: size,
+		})
 	
-	console.log('Submitting deposit transaction')
-	const transactionHash = await client.sendSignedTransaction(signedTransaction)
-	console.log(`Transaction Hash: 0x${bytes32String(transactionHash)}`)
-	const receipt = await waitForReceipt(client, transactionHash)
-	if (receipt.status !== 'success') throw new Error(`Receipt status indicates failure.`)
-
-	await printBalance(client, 'Tornado', tornadoInstance)
-	await printBalance(client, 'Sender', me.address)
+		console.log(`Depositing ${attoString(size)} ETH with ${nanoString(maxFeePerGas)} max fee and ${nanoString(maxPriorityFeePerGas)} priority fee.`)
+		await promptForEnterKey()
+		
+		console.log('Submitting deposit transaction')
+		const transactionHash = await client.sendSignedTransaction(signedTransaction)
+		console.log(`Transaction Hash: 0x${bytes32String(transactionHash)}`)
+		const receipt = await waitForReceipt(client, transactionHash)
+		if (receipt.status !== 'success') throw new Error(`Receipt status indicates failure.`)
+	
+		await printBalance(client, 'Tornado', tornadoInstance)
+		await printBalance(client, 'Sender', me.address)
+	}
 }
 
 export async function withdraw(testOnly: boolean) {
-	const client = new EthereumClient(ETHEREUM_JSON_RPC_ENDPOINT)
+	const client = new EthereumClient(ETHEREUM_JSON_RPC_ENDPOINT, EXTRA_HEADERS)
 	const { size, tornadoLabel, tornadoInstance, nullifier, secret } = await promptForNote()
 	const relayer = testOnly ? undefined : await promptForRelayer()
 	const { nullifierHash, commitment } = createDeposit({ nullifier, secret })

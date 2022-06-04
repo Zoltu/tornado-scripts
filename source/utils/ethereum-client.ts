@@ -9,7 +9,8 @@ export class EthereumClient {
 	private nextRequestId: number = 1
 
 	public constructor(
-		private readonly protocolHostPortPath: string
+		private readonly protocolHostPortPath: string,
+		private readonly extraHeaders: Record<string, string>,
 	) {}
 
 	public readonly getLatestBlock = async () => {
@@ -71,7 +72,7 @@ export class EthereumClient {
 	private readonly jsonRpcRequest = async (method: string, params: readonly unknown[]) => {
 		const request = { jsonrpc: '2.0', id: ++this.nextRequestId, method, params } as const
 		const body = JSON.stringify(request)
-		const response = await fetch(this.protocolHostPortPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, agent })
+		const response = await fetch(this.protocolHostPortPath, { method: 'POST', headers: { 'Content-Type': 'application/json', ...this.extraHeaders }, body, agent })
 		if (!response.ok) throw new Error(`${response.status}: ${response.statusText}\n${await response.text()}`)
 		const rawJsonRpcResponse = await response.json()
 		const jsonRpcResponse = parseJsonRpcResponse(rawJsonRpcResponse)
