@@ -83,7 +83,8 @@ export async function withdraw(testOnly: boolean) {
 	const client = new EthereumClient(ETHEREUM_JSON_RPC_ENDPOINT, EXTRA_HEADERS)
 	const { size, tornadoLabel, tornadoInstance, nullifier, secret } = await promptForNote()
 	const relayer = testOnly ? undefined : await promptForRelayer()
-	const { nullifierHash, commitment } = createDeposit({ nullifier, secret })
+	const { nullifierHash, commitment, preimage } = createDeposit({ nullifier, secret })
+	const noteString = `tornado-eth-${tornadoLabel}-1-${toHex(preimage, 62)}`
 
 	async function getDepositEvents(startBlock: bigint) {
 		console.log(`Fetching deposit events...`)
@@ -130,7 +131,13 @@ export async function withdraw(testOnly: boolean) {
 	if (relayer === undefined) {
 		const me = testOnly ? { address: 0n, privateKey: 1n, } : await getMe()
 		const { maxFeePerGas, maxPriorityFeePerGas } = testOnly ? { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n } : await promptForGasFees()
-		const { proof, root } = await getProof(me.address, 0n, 0n)
+		let proof: Uint8Array, root: bigint
+		try {
+			;({proof, root} = await getProof(me.address, 0n, 0n))
+		} catch (error: unknown) {
+			console.error(`Failed to generate proof for note \x1b[31m${noteString}\x1b[0m. ${(error as Error).message}`)
+			return
+		}
 		// withdraw(address _tornado, bytes _proof, bytes32 _root, bytes32 _nullifierHash, address _recipient, address _relayer, uint256 _fee, uint256 _refund)
 		const data = encodeMethod(0xb438689f, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS, [ tornadoInstance, proof, root, nullifierHash, me.address, 0n, 0n, 0n ])
 		const nonce = await client.getTransactionCount(me.address)
@@ -150,7 +157,7 @@ export async function withdraw(testOnly: boolean) {
 
 		if (testOnly) {
 			const result = await client.call(signedTransaction)
-			console.log(`Call Result (0x usually means success): ${toHexString(result)}`)
+			console.log(`Call Result (0x usually means success): \x1b[32m${toHexString(result)}\x1b[0m`)
 		} else {
 			console.log(`Withdrawing ${attoString(size)} ETH without a relayer to ${addressString(me.address)} with priority fee of ${nanoString(maxFeePerGas)} and a max fee of ${nanoString(maxPriorityFeePerGas)}`)
 			await promptForEnterKey()
@@ -238,9 +245,7 @@ export async function withdraw(testOnly: boolean) {
 		console.log(`Transaction with hash ${bytes32String(receipt.transactionHash)} mined ${receipt.status === 'success' ? 'successfully' : 'unsuccessfully'} in block ${receipt.bolckNumber} at index ${receipt.transactionIndex} using ${receipt.gasUsed} gas.`)
 	}
 
-	// Groth16 library leaves dangling unfinished promises, so script will not exit on its own when done.
 	console.log(`🎉`)
-	process.exit(0)
 }
 
 async function entrypoint() {

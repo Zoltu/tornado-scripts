@@ -8,6 +8,7 @@ export function main(func: () => Promise<void>) {
 	import('@peculiar/webcrypto')
 	.then(webcrypto => (globalThis as any).crypto = new webcrypto.Crypto())
 	.then(func)
+	.then(() => process.exit(0))
 	.catch(error => {
 		console.error('An error occurred.')
 		console.error(error)
