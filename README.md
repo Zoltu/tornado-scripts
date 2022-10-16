@@ -4,4 +4,7 @@ Also works on TOR if you have `SOCKS_SERVER` environment variable set.
 
 ## Run
 
+```
+npm ci --ignore-scripts
 npx --no-install ts-node ./source/index.ts
+```
