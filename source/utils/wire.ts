@@ -139,6 +139,17 @@ export function parseJsonRpcResponse(response: unknown) {
 	}
 }
 
+export function tryParseRelayerStatus(bodyString: string) {
+	let body
+	try { body = JSON.parse(bodyString) }
+	catch { return undefined }
+
+	if (typeof body !== 'object' || body === null) throw new Error(`Expected an object but got a ${typeof body}\n${body}`)
+	assertPropertyWithType(body, 'rewardAccount', assertIsHexString)
+	assertPropertyWithType(body, 'tornadoServiceFee', assertIsNumber)
+	return { rewardAccount: parseAddress(body.rewardAccount), tornadoServiceFee: body.tornadoServiceFee }
+}
+
 
 
 export function serializeAddress(address: bigint): `0x${string}` {

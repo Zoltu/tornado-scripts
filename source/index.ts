@@ -8,7 +8,7 @@ import { EthereumClient, waitForReceipt } from './utils/ethereum-client'
 import { promptForNote, promptForNoteSize, promptForRelayer, sizeToLabel, TORNADO_PROXY_ADDRESS } from './tornado/utils'
 import { signTransaction } from './utils/ethereum'
 import { TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS } from './tornado/tornadoProxyAbi'
-import { assertIsHexString, assertProperty, assertPropertyWithType, parseAddress, serializeAddress, serializeBytes32, serializeData } from './utils/wire'
+import { assertProperty, assertPropertyWithType, serializeAddress, serializeBytes32, serializeData, tryParseRelayerStatus } from './utils/wire'
 import { sleep } from './utils/node'
 import { toHexString, toUint8Array } from './utils/typed-arrays'
 import { assertNever } from './utils/typescript'
@@ -159,7 +159,7 @@ export async function withdraw(testOnly: boolean) {
 			const result = await client.call(signedTransaction)
 			console.log(`Call Result (0x usually means success): \x1b[32m${toHexString(result)}\x1b[0m`)
 		} else {
-			console.log(`Withdrawing ${attoString(size)} ETH without a relayer to ${addressString(me.address)} with priority fee of ${nanoString(maxFeePerGas)} and a max fee of ${nanoString(maxPriorityFeePerGas)}`)
+			console.log(`Withdrawing ${attoString(size)} ETH without a relayer to 0x${addressString(me.address)} with priority fee of ${nanoString(maxFeePerGas)} and a max fee of ${nanoString(maxPriorityFeePerGas)}`)
 			await promptForEnterKey()
 			const transactionHash = await client.sendSignedTransaction(signedTransaction)
 			console.log(`Transaction Hash: 0x${bytes32String(transactionHash)}`)
@@ -167,18 +167,13 @@ export async function withdraw(testOnly: boolean) {
 			if (receipt.status !== 'success') throw new Error(`Receipt status indicates failure.`)
 		}
 	} else {
-		function parseStatusBody(body: unknown) {
-			if (typeof body !== 'object' || body === null) throw new Error(`Expected an object but got a ${typeof body}\n${body}`)
-			assertPropertyWithType(body, 'rewardAccount', assertIsHexString)
-			return { rewardAccount: parseAddress(body.rewardAccount) }
-		}
-
 		async function getRelayerAddress() {
 			const response = await fetch(`${relayer}/status`, { method: 'GET', agent })
 			if (!response.ok) throw new Error(`Relayer status GET failed with ${response.status}: ${response.statusText}\n${await response.text()}`)
-			const body = await response.json()
-			const { rewardAccount } = parseStatusBody(body)
-			return rewardAccount
+			const body = await response.text()
+			const parsed = tryParseRelayerStatus(body)
+			if (parsed === undefined) throw new Error(`Relayer status had invalid body:\n${body}`)
+			return parsed
 		}
 
 		function parseWithdrawResponse(response: unknown) {
@@ -195,9 +190,9 @@ export async function withdraw(testOnly: boolean) {
 			return { status: response.status }
 		}
 
-		const relayerAddress = await getRelayerAddress()
+		const { rewardAccount: relayerAddress, tornadoServiceFee } = await getRelayerAddress()
 		const { baseFeePerGas } = await client.getLatestBlock()
-		const fee = baseFeePerGas * 500_000n + size / 10000n
+		const fee = baseFeePerGas * 500_000n + size * BigInt(Math.ceil(tornadoServiceFee * 100)) / 10000n
 		const recipientAddress = await promptForAddress(`Recipient: `)
 		const { proof, root } = await getProof(recipientAddress, relayerAddress, fee)
 		const body = {
@@ -213,7 +208,7 @@ export async function withdraw(testOnly: boolean) {
 			]
 		}
 
-		console.log(`Withdrawing ${attoString(size)} ETH via relayer to ${addressString(recipientAddress)} with a relayer fee of ${attoString(fee)}`)
+		console.log(`Withdrawing ${attoString(size)} ETH via relayer to 0x${addressString(recipientAddress)} with a relayer fee of ${attoString(fee)}`)
 		await promptForEnterKey()
 		const withdrawHttpResponse = await fetch(`${relayer}/v1/tornadoWithdraw`, {
 			method: 'POST',

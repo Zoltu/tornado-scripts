@@ -1,7 +1,9 @@
+import fetch from 'node-fetch'
 import { bytesToUnsignedLittleEndian } from '../utils/bigint'
 import { promptForStringUnion, withPrompt } from '../utils/script-helpers'
 import { toUint8Array } from '../utils/typed-arrays'
 import { assertNever } from '../utils/typescript'
+import { agent } from '../utils/agent'
 
 const DECIETH = 100_000_000_000_000_000n as const
 const ETH = 1_000_000_000_000_000_000n as const
@@ -23,11 +25,28 @@ const TORNADO_DEKAETH_ADDRESS = 0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbFn
 const TORNADO_HECTOETH_ADDRESS = 0xA160cdAB225685dA1d56aa342Ad8841c3b53f291n
 
 const RELAYERS = [
-	'https://mainnet-v2.defidevotee.xyz',
-	'https://mainnet-v2.torn.cash',
-	'https://mainnet-relayer.hertz.zone',
-	'https://mainnet-v2.therelayer.xyz',
-	'https://mainnet.t-relay.online',
+	'http://eth.fsdhreu39jfk.com',
+	'https://black-hardy.com',
+	'https://eth.crelayer.xyz',
+	'https://eth.maxstorn.xyz',
+	'https://eth.reltor.su',
+	'https://eth.t-relayer.com',
+	'https://main-relayer.com',
+	'https://main.gm777.xyz',
+	'https://main.x-relayer.top',
+	'https://mainnet-relayer.favorite-r.xyz',
+	'https://mainnet-tornado.cheap-relayer.xyz',
+	'https://mainnet-tornado.low-fee.xyz',
+	'https://mainnet-tornado.relayernews.xyz',
+	'https://mainnet.0x0relayer.xyz',
+	'https://mainnet.firstrelayer.xyz',
+	'https://relayer.wind-egg.com',
+	'https://torn-city.com',
+	'https://torn.relayersdao.finance',
+	'https://torn.relayersdao.finance',
+	'https://tornado.evmjunkie.xyz',
+	'https://tornadocashdev-relayer.xyz',
+	'https://tornima.xyz',
 ] as const
 
 export async function promptForNoteSize() {
@@ -57,7 +76,42 @@ export async function promptForRelayer() {
 	const useRelayer = await promptForStringUnion(`🎭 Use Relayer (yes/no)?: `, ['yes', 'no'])
 	switch (useRelayer) {
 		case 'no': return undefined
-		case 'yes': return RELAYERS[Math.floor(Math.random() * RELAYERS.length)]
+		case 'yes':
+			const testedRelayers: (typeof RELAYERS[number])[] = []
+			while (testedRelayers.length !== RELAYERS.length) {
+				const selectedRelayer = RELAYERS[Math.floor(Math.random() * RELAYERS.length)]
+				if (testedRelayers.includes(selectedRelayer)) continue
+				testedRelayers.push(selectedRelayer)
+				console.log(`Testing relayer ${selectedRelayer}...`)
+				const response = await fetch(`${selectedRelayer}/status`, { method: 'GET', agent })
+				if (!response.ok) {
+					console.log(`Relayer status GET failed with ${response.status}: ${response.statusText}`)
+					continue
+				}
+				const tryGetBodyAsJson = async () => {
+					try {
+						return JSON.parse(await response.text()) as unknown
+					} catch (error) {
+						return undefined
+					}
+				}
+				const body = await tryGetBodyAsJson()
+				if (body === undefined) {
+					console.log(`Relayer status returned non-JSON.`)
+					continue
+				}
+				if (typeof body !== 'object' || body === null || Array.isArray(body) || !('tornadoServiceFee' in body)) {
+					console.log(`Invalid status JSON from relayer.`)
+					continue
+				}
+				if ((body as {tornadoServiceFee: number}).tornadoServiceFee > 0.5) {
+					console.log(`Relayer fee too high (<0.5): ${(body as {tornadoServiceFee: number}).tornadoServiceFee}`)
+					continue
+				}
+				return selectedRelayer
+			}
+			console.log(`No viable relayers found.`)
+			process.exit(1)
 		default: assertNever(useRelayer)
 	}
 }
