@@ -1,6 +1,6 @@
 import fetch from 'node-fetch'
 import { bytesToUnsignedLittleEndian } from '../utils/bigint'
-import { promptForStringUnion, withPrompt } from '../utils/script-helpers'
+import { multilinePrompt, promptForStringUnion, withPrompt } from '../utils/script-helpers'
 import { toUint8Array } from '../utils/typed-arrays'
 import { assertNever } from '../utils/typescript'
 import { agent } from '../utils/agent'
@@ -18,11 +18,11 @@ type TornadoSize = Decieth | Eth | Dekaeth | Hectoeth
 
 export type TornadoLabel = '0.1' | '1' | '10' | '100'
 
-export const TORNADO_PROXY_ADDRESS = 0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31bn
-const TORNADO_DECIETH_ADDRESS = 0x12D66f87A04A9E220743712cE6d9bB1B5616B8Fcn
-const TORNADO_ETH_ADDRESS = 0x47CE0C6eD5B0Ce3d3A51fdb1C52DC66a7c3c2936n
-const TORNADO_DEKAETH_ADDRESS = 0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbFn
-const TORNADO_HECTOETH_ADDRESS = 0xA160cdAB225685dA1d56aa342Ad8841c3b53f291n
+export const TORNADO_PROXY_ADDRESS = 0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31bn as const
+const TORNADO_DECIETH_ADDRESS = 0x12D66f87A04A9E220743712cE6d9bB1B5616B8Fcn as const
+const TORNADO_ETH_ADDRESS = 0x47CE0C6eD5B0Ce3d3A51fdb1C52DC66a7c3c2936n as const
+const TORNADO_DEKAETH_ADDRESS = 0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbFn as const
+const TORNADO_HECTOETH_ADDRESS = 0xA160cdAB225685dA1d56aa342Ad8841c3b53f291n as const
 
 const RELAYERS = [
 	'http://eth.fsdhreu39jfk.com',
@@ -57,19 +57,21 @@ export async function promptForNoteSize() {
 	})
 }
 
-export async function promptForNote() {
-	return withPrompt(async prompt => {
-		const valueAsString = await prompt(`📝 Note: `)
-		const match = /tornado-(?<currency>\w+)-(?<label>[\d.]+)-(?<netId>\d+)-0x(?<nullifier>[0-9a-fA-F]{62})(?<secret>[0-9a-fA-F]{62})/g.exec(valueAsString)
-		if (!match) throw new Error(`That doesn't look like a note.`)
+export async function promptForNotes() {
+	const lines = await multilinePrompt(`📝 Notes (blank line to end): `)
+	const notes = []
+	for (const line of lines) {
+		const match = /tornado-(?<currency>\w+)-(?<label>[\d.]+)-(?<netId>\d+)-0x(?<nullifier>[0-9a-fA-F]{62})(?<secret>[0-9a-fA-F]{62})/g.exec(line)
+		if (!match) throw new Error(`That doesn't look like a note: ${line}`)
 
 		const tornadoLabel = match.groups!['label']
 		assertTornadoLabel(tornadoLabel)
 		const { size, tornadoInstance } = tornadoLabelToDetails(tornadoLabel)
 		const nullifier = bytesToUnsignedLittleEndian(toUint8Array(match.groups!['nullifier'], 32))
 		const secret = bytesToUnsignedLittleEndian(toUint8Array(match.groups!['secret'], 32))
-		return { size, tornadoLabel, tornadoInstance, nullifier, secret }
-	})
+		notes.push({ size, tornadoLabel, tornadoInstance, nullifier, secret })
+	}
+	return notes
 }
 
 export async function promptForRelayer() {

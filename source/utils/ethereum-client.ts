@@ -54,6 +54,26 @@ export class EthereumClient {
 		return parseData(result)
 	}
 
+	public readonly estimateGas = async (transaction: PartiallyRequired<Partial<IUnsignedTransaction1559>, 'accessList' | 'chainId' | 'data' | 'from' | 'maxFeePerGas' | 'maxPriorityFeePerGas' | 'nonce' | 'to' | 'type' | 'value'>) => {
+		const result = await this.jsonRpcRequest('eth_estimateGas', [{
+			type: '0x2',
+			from: serializeAddress(transaction.from),
+			chainId: serializeQuantity(transaction.chainId),
+			nonce: serializeQuantity(transaction.nonce),
+			maxFeePerGas: serializeQuantity(transaction.maxFeePerGas),
+			maxPriorityFeePerGas: serializeQuantity(transaction.maxPriorityFeePerGas),
+			to: transaction.to === null ? null : serializeAddress(transaction.to),
+			value: serializeQuantity(transaction.value),
+			data: serializeData(transaction.data),
+			accessList: transaction.accessList.map(item => ({
+				address: serializeAddress(item.address),
+				storageKeys: item.storageKeys.map(serializeBytes32),
+			}))
+		}, 'latest'])
+		// Tornado transactions can fluctuate in gas used due to other deposits showing up, so pad by 10%
+		return parseQuantity(result) * 11n / 10n
+	}
+
 	public readonly sendSignedTransaction = async (transaction: ISignedTransaction) => {
 		const response = await this.jsonRpcRequest('eth_sendRawTransaction', [serializeTransactionToString(transaction)])
 		return parseBytes32(response)

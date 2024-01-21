@@ -100,6 +100,20 @@ export async function promptForEnterKey() {
 	})
 }
 
+export async function multilinePrompt(prompt: string): Promise<readonly string[]> {
+	const readlineInterface = readline.createInterface({ input: process.stdin, output: process.stdout})
+	console.log(prompt)
+	const lines = await new Promise<readonly string[]>(resolve => {
+		const lines: string[] = []
+		readlineInterface.on('line', line => {
+			if (line.length === 0) readlineInterface.close()
+			else lines.push(line)
+		})
+		readlineInterface.on('close', () => resolve(lines))
+	})
+	return lines
+}
+
 export async function withPrompt<T>(func: (prompt: Prompt) => Promise<T>): Promise<T> {
 	const readlineInterface = readline.createInterface({ input: process.stdin, output: process.stdout })
 	const prompt = (prompt: string) => new Promise<string>(resolve => readlineInterface.question(prompt, resolve))

@@ -1,4 +1,5 @@
 import { TornadoLabel } from './utils'
+import { MerkleTree } from './lib/MerkleTree'
 
 export function rbigint(numberOfBytes: number): bigint
 
@@ -27,8 +28,7 @@ type DepositEvent = {
 	}
 }
 export function generateProof(
-	getDepositEvents: (lastBlockNumber: bigint) => Promise<readonly DepositEvent[]>,
-	isKnownRoot: (root: bigint) => Promise<boolean>,
+	merkleTree: MerkleTree,
 	isSpent: (nullifierHash: bigint) => Promise<boolean>,
 	deposit: {
 		nullifierHash: bigint
@@ -42,3 +42,9 @@ export function generateProof(
 	fee: bigint,
 	refund: bigint,
 ): Promise<ProofResult>
+
+export function generateMerkleTree(
+	getDepositEvents: (lastBlockNumber: bigint) => Promise<readonly DepositEvent[]>,
+	isKnownRoot: (root: bigint) => Promise<boolean>,
+	amount: TornadoLabel,
+): Promise<MerkleTree>

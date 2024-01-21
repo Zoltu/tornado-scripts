@@ -42,13 +42,13 @@ export function createDeposit({ nullifier, secret }) {
  * @param fee Relayer fee
  * @param refund Receive ether for exchanged tokens
  */
- export async function generateProof(getDepositEvents, isKnownRoot, isSpent, deposit, amount, recipient, relayerAddress = 0n, fee = 0n, refund = 0n) {
-	 // groth16 initialises a lot of Promises that will never be resolved, that's why we need to use process.exit to terminate the CLI
+ export async function generateProof(tree, isSpent, deposit, amount, recipient, relayerAddress = 0n, fee = 0n, refund = 0n) {
+	// groth16 initialises a lot of Promises that will never be resolved, that's why we need to use process.exit to terminate the CLI
 	const groth16 = await buildGroth16()
 	const proving_key = await filesystem.readFile(`${__dirname}/proving-key.bin`)
 
 	// Compute merkle proof of our commitment
-	const { root, path_elements, path_index } = await generateMerkleProof(getDepositEvents, isKnownRoot, isSpent, deposit, amount)
+	const { root, path_elements, path_index } = await generateMerkleProof(tree, isSpent, deposit, amount)
 
 	// Prepare circuit input
 	const input = {
@@ -82,10 +82,19 @@ export function createDeposit({ nullifier, secret }) {
  * in it and generates merkle proof
  * @param deposit Deposit object
  */
-async function generateMerkleProof(getDepositEvents, isKnownRoot, isSpent, deposit, amount) {
-	let leafIndex = -1
-	// Get all deposit events from smart contract and assemble merkle tree from them
+async function generateMerkleProof(tree, isSpent, deposit, amount) {
+	// Validate that our data is correct
+	assert(await isSpent(deposit.nullifierHash) === false, 'The note is already spent')
+	const leafIndex = tree.getIndexByElement(deposit.commitment.toString(10))
+	assert(leafIndex, 'The deposit is not found in the tree')
+	console.log(`... done.`)
 
+	// Compute merkle proof of our commitment
+	return tree.path(leafIndex)
+}
+
+export async function generateMerkleTree(getDepositEvents, isKnownRoot, amount) {
+	// Get all deposit events from smart contract and assemble merkle tree from them
 	const cachedEvents = loadCachedEvents({ type: 'Deposit', amount })
 
 	const startBlock = BigInt(cachedEvents.lastBlock) + 1n
@@ -119,23 +128,11 @@ async function generateMerkleProof(getDepositEvents, isKnownRoot, isSpent, depos
 		.map((e, i, array) => {
 			const index = e.leafIndex
 			const commitment = BigInt(e.commitment)
-
-			if (commitment === deposit.commitment) {
-				leafIndex = index
-			}
 			return commitment.toString(10)
 		})
 	const tree = new merkleTree(20, leaves)
-
-	// Validate that our data is correct
-	const root = await tree.root()
-	assert(await isKnownRoot(BigInt(root)) === true, 'Merkle tree is corrupted')
-	assert(await isSpent(deposit.nullifierHash) === false, 'The note is already spent')
-	assert(leafIndex >= 0, 'The deposit is not found in the tree')
-	console.log(`... done.`)
-
-	// Compute merkle proof of our commitment
-	return tree.path(leafIndex)
+	assert(await isKnownRoot(BigInt(await tree.root())) === true, 'Merkle tree is corrupted')
+	return tree
 }
 
 function loadCachedEvents({ type, amount }) {
