@@ -10,7 +10,7 @@ export const CONSOLE_COLOR = {
 	BLINK: "\x1b[5m",
 	REVERSE: "\x1b[7m",
 	HIDDEN: "\x1b[8m",
-	
+
 	FGBLACK: "\x1b[30m",
 	FGRED: "\x1b[31m",
 	FGGREEN: "\x1b[32m",
@@ -20,7 +20,7 @@ export const CONSOLE_COLOR = {
 	FGCYAN: "\x1b[36m",
 	FGWHITE: "\x1b[37m",
 	FGGRAY: "\x1b[90m",
-	
+
 	BGBLACK: "\x1b[40m",
 	BGRED: "\x1b[41m",
 	BGGREEN: "\x1b[42m",

@@ -44,11 +44,11 @@ export async function deposit() {
 		const deposit = createDeposit({ nullifier: rbigint(31), secret: rbigint(31) })
 		const note = toHex(deposit.preimage, 62)
 		const noteString = `tornado-eth-${sizeToLabel(size)}-1-${note}`
-	
+
 		console.log(`Your note: ${noteString}`)
 		await printBalance(client, 'Tornado', tornadoInstance)
 		await printBalance(client, 'Sender', me.address)
-		
+
 		// deposit(address _tornado, bytes32 _commitment, bytes _encryptedNote)
 		const data = encodeMethod(0x13d98d13, TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, [tornadoInstance, deposit.commitment, new Uint8Array(0)])
 		const nonce = await client.getTransactionCount(me.address)
@@ -66,16 +66,16 @@ export async function deposit() {
 		} as const
 		const gasLimit = await client.estimateGas(transaction)
 		const signedTransaction = await signTransaction(me.privateKey, { ...transaction, gasLimit })
-	
+
 		console.log(`Depositing ${attoString(size)} ETH with ${nanoString(maxFeePerGas)} max fee, ${nanoString(maxPriorityFeePerGas)} priority fee, and ${gasLimit} gas limit.`)
 		await promptForEnterKey()
-		
+
 		console.log('Submitting deposit transaction')
 		const transactionHash = await client.sendSignedTransaction(signedTransaction)
 		console.log(`Transaction Hash: 0x${bytes32String(transactionHash)}`)
 		const receipt = await waitForReceipt(client, transactionHash)
 		if (receipt.status !== 'success') throw new Error(`Receipt status indicates failure.`)
-	
+
 		await printBalance(client, 'Tornado', tornadoInstance)
 		await printBalance(client, 'Sender', me.address)
 	}
@@ -89,7 +89,7 @@ export async function withdraw(testOnly: boolean) {
 	for (const { size, tornadoLabel, tornadoInstance, nullifier, secret } of notes) {
 		const { nullifierHash, commitment, preimage } = createDeposit({ nullifier, secret })
 		const noteString = `tornado-eth-${tornadoLabel}-1-${toHex(preimage, 62)}`
-		
+
 		async function getDepositEvents(startBlock: bigint) {
 			console.log(`Fetching deposit events...`)
 			const { number: latestBlockNumber } = await client.getLatestBlock()
@@ -114,25 +114,25 @@ export async function withdraw(testOnly: boolean) {
 			console.log(`... done.`)
 			return logs
 		}
-	
+
 		async function isKnownRoot(root: bigint) {
 			const data = await encodeMethod(keccak256.hash, 'isKnownRoot(bytes32 _root)', [root])
 			const result = await client.call({ data, to: tornadoInstance })
 			return Boolean(bytesToUnsigned(result))
 		}
-	
+
 		async function isSpent(nullifierHash: bigint) {
 			const data = await encodeMethod(keccak256.hash, 'isSpent(bytes32 _nullifierHash)', [nullifierHash])
 			const result = await client.call({ data, to: tornadoInstance })
 			return Boolean(bytesToUnsigned(result))
 		}
-	
+
 		async function getProof(recipientAddress: bigint, relayerAddress: bigint, fee: bigint) {
 			const tree = memoizedTrees[tornadoLabel] = memoizedTrees[tornadoLabel] ?? await generateMerkleTree(getDepositEvents, isKnownRoot, tornadoLabel)
 			const { proof, root } = await generateProof(tree, isSpent, { nullifier, secret, nullifierHash, commitment }, tornadoLabel, recipientAddress, relayerAddress, fee, 0n)
 			return { proof: toUint8Array(proof), root: BigInt(root) }
 		}
-	
+
 		if (relayer === undefined) {
 			const me = testOnly ? { address: 0n, privateKey: 1n, } : await getMe()
 			const { maxFeePerGas, maxPriorityFeePerGas } = testOnly ? { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n } : await promptForGasFees()
@@ -161,7 +161,7 @@ export async function withdraw(testOnly: boolean) {
 			} as const
 			const gasLimit = await client.estimateGas(transaction)
 			const signedTransaction = await signTransaction(me.privateKey, { ...transaction, gasLimit })
-	
+
 			if (testOnly) {
 				const result = await client.call(signedTransaction)
 				console.log(`Call Result (0x usually means success): \x1b[32m${toHexString(result)}\x1b[0m`)
@@ -182,13 +182,13 @@ export async function withdraw(testOnly: boolean) {
 				if (parsed === undefined) throw new Error(`Relayer status had invalid body:\n${body}`)
 				return parsed
 			}
-	
+
 			function parseWithdrawResponse(response: unknown) {
 				if (typeof response !== 'object' || response === null) throw new Error(`Expected an object but got a ${typeof response}\n${response}`)
 				assertProperty(response, 'id')
 				return { id: response.id } as const
 			}
-	
+
 			function parseStatusResponse(response: unknown) {
 				if (typeof response !== 'object' || response === null) throw new Error(`Expected an object but got a ${typeof response}\n${response}`)
 				assertPropertyWithType(response, 'status', (status: unknown): asserts status is 'FAILED' | 'CONFIRMED' | 'ACCEPTED' | 'SENT' => {
@@ -196,7 +196,7 @@ export async function withdraw(testOnly: boolean) {
 				})
 				return { status: response.status }
 			}
-	
+
 			const { rewardAccount: relayerAddress, tornadoServiceFee } = await getRelayerAddress()
 			const { baseFeePerGas } = await client.getLatestBlock()
 			const fee = (baseFeePerGas * 125n / 100n + 3n * 10n**9n) * 700_000n + size * BigInt(Math.ceil(tornadoServiceFee * 100)) / 10000n
@@ -214,7 +214,7 @@ export async function withdraw(testOnly: boolean) {
 					serializeBytes32(0n),
 				]
 			}
-	
+
 			console.log(`Withdrawing ${attoString(size)} ETH via relayer to 0x${addressString(recipientAddress)} with a relayer fee of ${attoString(fee)}`)
 			await promptForEnterKey()
 			const withdrawHttpResponse = await fetch(`${relayer}/v1/tornadoWithdraw`, {
@@ -225,7 +225,7 @@ export async function withdraw(testOnly: boolean) {
 			})
 			if (!withdrawHttpResponse.ok) throw new Error(`tornadoWithdraw POST failed with ${withdrawHttpResponse.status}: ${withdrawHttpResponse.statusText}\n${await withdrawHttpResponse.text()}`)
 			const { id } = parseWithdrawResponse(await withdrawHttpResponse.json())
-	
+
 			let transactionHash
 			while (true) {
 				const jobStatusHttpResponse = await fetch(`${relayer}/v1/jobs/${id}`, { method: 'GET', agent })
@@ -241,12 +241,12 @@ export async function withdraw(testOnly: boolean) {
 				console.log(`Relay job status: ${status}, transaction hash: ${jobStatusBody['txHash']}`)
 				await sleep(3000)
 			}
-	
+
 			if (transactionHash === undefined) throw new Error(`Somehow exited infinite loop without a transaction hash.`)
 			const receipt = await waitForReceipt(client, transactionHash)
 			console.log(`Transaction with hash ${bytes32String(receipt.transactionHash)} mined ${receipt.status === 'success' ? 'successfully' : 'unsuccessfully'} in block ${receipt.bolckNumber} at index ${receipt.transactionIndex} using ${receipt.gasUsed} gas.`)
 		}
-	
+
 		console.log(`🎉`)
 	}
 }
