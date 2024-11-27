@@ -5,9 +5,9 @@ import { main, promptForAddress, promptForEnterKey, promptForGasFees, promptForI
 import { createDeposit, generateMerkleTree, generateProof, rbigint, toHex } from './tornado'
 import { addressString, attoString, bytes32String, bytesToUnsigned, nanoString } from './utils/bigint'
 import { EthereumClient, waitForReceipt } from './utils/ethereum-client'
-import { promptForNotes, promptForNoteSize, promptForRelayer, sizeToLabel, TORNADO_PROXY_ADDRESS, TornadoLabel } from './tornado/utils'
+import { promptForNotes, promptForNoteSize, promptForRelayer, sizeToLabel, TornadoLabel } from './tornado/utils'
 import { signTransaction } from './utils/ethereum'
-import { TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS } from './tornado/tornadoProxyAbi'
+import { TORNADO_DEPOSIT_INPUT_PARAMETERS, TORNADO_WITHDRAW_INPUT_PARAMETERS } from './tornado/tornadoAbi'
 import { assertProperty, assertPropertyWithType, serializeAddress, serializeBytes32, serializeData, tryParseRelayerStatus } from './utils/wire'
 import { sleep } from './utils/node'
 import { toHexString, toUint8Array } from './utils/typed-arrays'
@@ -49,8 +49,12 @@ export async function deposit() {
 		await printBalance(client, 'Tornado', tornadoInstance)
 		await printBalance(client, 'Sender', me.address)
 
-		// deposit(address _tornado, bytes32 _commitment, bytes _encryptedNote)
-		const data = encodeMethod(0x13d98d13, TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, [tornadoInstance, deposit.commitment, new Uint8Array(0)])
+		// switch to ththis if you want to use the proxy
+		// 0x13d98d13 == 4byte(deposit(address _tornado, bytes32 _commitment, bytes _encryptedNote))
+		//const data = encodeMethod(0x13d98d13, TORNADO_PROXY_DEPOSIT_INPUT_PARAMETERS, [tornadoInstance, deposit.commitment, new Uint8Array(0)])
+
+		// 0xb214faa5 == 4byte(deposit(bytes32 _commitment))
+		const data = encodeMethod(0xb214faa5, TORNADO_DEPOSIT_INPUT_PARAMETERS, [deposit.commitment])
 		const nonce = await client.getTransactionCount(me.address)
 		const transaction = {
 			accessList: [],
@@ -59,7 +63,8 @@ export async function deposit() {
 			maxFeePerGas,
 			maxPriorityFeePerGas,
 			nonce,
-			to: TORNADO_PROXY_ADDRESS,
+			// to: TORNADO_PROXY_ADDRESS
+			to: tornadoInstance,
 			type: '1559',
 			chainId: 1n,
 			value: size,
@@ -144,8 +149,13 @@ export async function withdraw(testOnly: boolean) {
 				if (testOnly) continue
 				else return
 			}
-			// withdraw(address _tornado, bytes _proof, bytes32 _root, bytes32 _nullifierHash, address _recipient, address _relayer, uint256 _fee, uint256 _refund)
-			const data = encodeMethod(0xb438689f, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS, [ tornadoInstance, proof, root, nullifierHash, me.address, 0n, 0n, 0n ])
+
+			// switch to ththis if you want to use the proxy
+			// 0xb438689f == 4byte(withdraw(address _tornado, bytes _proof, bytes32 _root, bytes32 _nullifierHash, address _recipient, address _relayer, uint256 _fee, uint256 _refund))
+			// const data = encodeMethod(0xb438689f, TORNADO_PROXY_WITHDRAW_INPUT_PARAMETERS, [ tornadoInstance, proof, root, nullifierHash, me.address, 0n, 0n, 0n ])
+
+			// 0x21a0adb6 == 4byte(withdraw(bytes calldata _proof, bytes32 _root, bytes32 _nullifierHash, address payable _recipient, address payable _relayer, uint256 _fee, uint256 _refund))
+			const data = encodeMethod(0x21a0adb6, TORNADO_WITHDRAW_INPUT_PARAMETERS, [proof, root, nullifierHash, me.address, 0n, 0n, 0n])
 			const nonce = await client.getTransactionCount(me.address)
 			const transaction = {
 				type: '1559',
@@ -156,7 +166,8 @@ export async function withdraw(testOnly: boolean) {
 				maxFeePerGas,
 				maxPriorityFeePerGas,
 				nonce,
-				to: TORNADO_PROXY_ADDRESS,
+				// to: TORNADO_PROXY_ADDRESS,
+				to: tornadoInstance,
 				value: 0n,
 			} as const
 			const gasLimit = await client.estimateGas(transaction)
