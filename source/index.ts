@@ -135,7 +135,7 @@ export async function withdraw(testOnly: boolean) {
 
 		if (relayer === undefined) {
 			const me = testOnly ? { address: 0n, privateKey: 1n, } : await getMe()
-			const { maxFeePerGas, maxPriorityFeePerGas } = testOnly ? { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n } : await promptForGasFees()
+			const { maxFeePerGas, maxPriorityFeePerGas } = testOnly ? { maxFeePerGas: 0n, maxPriorityFeePerGas: 0n } : await promptForGasFees()
 			let proof: Uint8Array, root: bigint
 			try {
 				;({proof, root} = await getProof(me.address, 0n, 0n))
