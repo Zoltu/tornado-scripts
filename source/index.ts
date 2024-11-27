@@ -199,7 +199,7 @@ export async function withdraw(testOnly: boolean) {
 	
 			const { rewardAccount: relayerAddress, tornadoServiceFee } = await getRelayerAddress()
 			const { baseFeePerGas } = await client.getLatestBlock()
-			const fee = baseFeePerGas * 500_000n + size * BigInt(Math.ceil(tornadoServiceFee * 100)) / 10000n
+			const fee = (baseFeePerGas * 125n / 100n + 3n * 10n**9n) * 700_000n + size * BigInt(Math.ceil(tornadoServiceFee * 100)) / 10000n
 			const recipientAddress = await promptForAddress(`Recipient: `)
 			const { proof, root } = await getProof(recipientAddress, relayerAddress, fee)
 			const body = {
