@@ -85,31 +85,42 @@ export async function promptForRelayer() {
 				if (testedRelayers.includes(selectedRelayer)) continue
 				testedRelayers.push(selectedRelayer)
 				console.log(`Testing relayer ${selectedRelayer}...`)
-				const response = await fetch(`${selectedRelayer}/status`, { method: 'GET', agent })
-				if (!response.ok) {
-					console.log(`Relayer status GET failed with ${response.status}: ${response.statusText}`)
-					continue
-				}
-				const tryGetBodyAsJson = async () => {
-					try {
-						return JSON.parse(await response.text()) as unknown
-					} catch (error) {
-						return undefined
+				try {
+					const response = await fetch(`${selectedRelayer}/status`, { method: 'GET', agent })
+					if (!response.ok) {
+						console.error(`Relayer status GET failed with ${response.status}: ${response.statusText}`)
+						continue
 					}
-				}
-				const body = await tryGetBodyAsJson()
-				if (body === undefined) {
-					console.log(`Relayer status returned non-JSON.`)
+					const tryGetBodyAsJson = async () => {
+						try {
+							return JSON.parse(await response.text()) as unknown
+						} catch (error) {
+							return undefined
+						}
+					}
+					const body = await tryGetBodyAsJson()
+					if (body === undefined) {
+						console.error(`Relayer status returned non-JSON.`)
+						continue
+					}
+					if (typeof body !== 'object' || body === null || Array.isArray(body) || !('tornadoServiceFee' in body)) {
+						console.error(`Invalid status JSON from relayer.`)
+						continue
+					}
+					if ((body as {tornadoServiceFee: number}).tornadoServiceFee > 0.5) {
+						console.error(`Relayer fee too high (<0.5): ${(body as {tornadoServiceFee: number}).tornadoServiceFee}`)
+						continue
+					}
+				} catch (error: unknown) {
+					if (typeof(error) === 'object' && error !== null && 'code' in error && error.code === 'ConnectionRefused') {
+						console.error(`Relayer connection refused.`)
+					} else {
+						console.error(`Fetch of relayer threw an exception.`)
+						console.error(error)
+					}
 					continue
 				}
-				if (typeof body !== 'object' || body === null || Array.isArray(body) || !('tornadoServiceFee' in body)) {
-					console.log(`Invalid status JSON from relayer.`)
-					continue
-				}
-				if ((body as {tornadoServiceFee: number}).tornadoServiceFee > 0.5) {
-					console.log(`Relayer fee too high (<0.5): ${(body as {tornadoServiceFee: number}).tornadoServiceFee}`)
-					continue
-				}
+				console.log(`Valid relayer found.`)
 				return selectedRelayer
 			}
 			console.log(`No viable relayers found.`)
